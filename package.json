@@ -1,0 +1,36 @@
+{
+  "name": "spectr-ai",
+  "version": "0.1.0",
+  "description": "AI-powered smart contract security analyzer",
+  "type": "module",
+  "bin": {
+    "spectr-ai": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "lint": "oxlint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "solidity",
+    "smart-contract",
+    "security",
+    "ai",
+    "audit"
+  ],
+  "author": "Pavel Espitia",
+  "license": "MIT",
+  "packageManager": "pnpm@10.19.0",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.82.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "oxlint": "^1.59.0",
+    "tsx": "^4.21.0",
+    "typescript": "5.8.3",
+    "vitest": "^4.1.3"
+  }
+}
