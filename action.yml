@@ -1,0 +1,72 @@
+name: "spectr-ai"
+description: "AI-powered smart contract security analyzer using Claude"
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  path:
+    description: "Path to .sol file or directory"
+    required: true
+  api-key:
+    description: "Anthropic API key"
+    required: true
+  format:
+    description: "Output format: text, json, or sarif"
+    required: false
+    default: "sarif"
+
+outputs:
+  report:
+    description: "Analysis report output"
+    value: ${{ steps.analyze.outputs.report }}
+  exit-code:
+    description: "Exit code (2 = critical/high issues found)"
+    value: ${{ steps.analyze.outputs.exit_code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d  # v4.1.0
+
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+      with:
+        node-version: "22"
+
+    - name: Install spectr-ai
+      shell: bash
+      run: pnpm add -g spectr-ai
+
+    - name: Run analysis
+      id: analyze
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.api-key }}
+      run: |
+        set +e
+        flag=""
+        if [ "${{ inputs.format }}" = "json" ]; then
+          flag="--json"
+        elif [ "${{ inputs.format }}" = "sarif" ]; then
+          flag="--sarif"
+        fi
+
+        output=$(spectr-ai ${flag} "${{ inputs.path }}" 2>/dev/null)
+        exit_code=$?
+
+        echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+
+        # Write report to file for sarif upload
+        if [ "${{ inputs.format }}" = "sarif" ]; then
+          echo "${output}" > spectr-ai-results.sarif
+        fi
+
+        echo "report<<SPECTR_EOF" >> "$GITHUB_OUTPUT"
+        echo "${output}" >> "$GITHUB_OUTPUT"
+        echo "SPECTR_EOF" >> "$GITHUB_OUTPUT"
+
+        if [ "${exit_code}" -eq 2 ]; then
+          echo "::warning::spectr-ai found critical or high severity issues"
+        fi
+
+        exit ${exit_code}

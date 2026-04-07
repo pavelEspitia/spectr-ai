@@ -6,31 +6,47 @@
   "bin": {
     "spectr-ai": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "lint": "oxlint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build"
   },
   "keywords": [
     "solidity",
     "smart-contract",
     "security",
     "ai",
-    "audit"
+    "audit",
+    "sarif"
   ],
   "author": "Pavel Espitia",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pavelEspitia/spectr-ai.git"
+  },
+  "homepage": "https://github.com/pavelEspitia/spectr-ai#readme",
+  "bugs": {
+    "url": "https://github.com/pavelEspitia/spectr-ai/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "packageManager": "pnpm@10.19.0",
   "dependencies": {
     "@anthropic-ai/sdk": "0.82.0"
   },
   "devDependencies": {
-    "@types/node": "^25.5.2",
-    "oxlint": "^1.59.0",
-    "tsx": "^4.21.0",
+    "@types/node": "25.5.2",
+    "oxlint": "1.59.0",
+    "tsx": "4.21.0",
     "typescript": "5.8.3",
-    "vitest": "^4.1.3"
+    "vitest": "4.1.3"
   }
 }
