@@ -1,14 +1,31 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  analyzeContract,
-  analyzeContractJson,
-} from "./analyzer.js";
+import { analyzeContractJson } from "./analyzer.js";
 import type { Severity, JsonReport } from "./analyzer.js";
 import { validateSolidityFile } from "./validator.js";
 import { findSolidityFiles } from "./files.js";
 import { toSarif } from "./sarif.js";
+import { formatReport } from "./formatter.js";
+import { loadConfig, shouldExcludeFile } from "./config.js";
+
+type OutputFormat = "text" | "json" | "sarif";
+
+const SEVERITY_RANK: Record<Severity, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
+
+const VALID_SEVERITIES = new Set<string>(Object.keys(SEVERITY_RANK));
+
+interface CliArgs {
+  paths: string[];
+  format: OutputFormat;
+  failOn: Severity;
+}
 
 function getApiKey(): string {
   const key = process.env["ANTHROPIC_API_KEY"];
@@ -31,26 +48,41 @@ function readContract(filePath: string): string {
   }
 }
 
-interface CliArgs {
-  paths: string[];
-  json: boolean;
-  sarif: boolean;
-}
-
 function parseArgs(argv: string[]): CliArgs {
   const args = argv.slice(2);
-  const json = args.includes("--json");
-  const sarif = args.includes("--sarif");
-  const positional = args.filter((a) => !a.startsWith("--"));
+  let format: OutputFormat = "text";
+  if (args.includes("--json")) format = "json";
+  if (args.includes("--sarif")) format = "sarif";
+
+  let failOn: Severity = "high";
+  const failOnIdx = args.indexOf("--fail-on");
+  if (failOnIdx !== -1) {
+    const value = args[failOnIdx + 1];
+    if (!value || !VALID_SEVERITIES.has(value)) {
+      console.error(
+        "Error: --fail-on requires a severity: critical, high, medium, low, info",
+      );
+      process.exit(1);
+    }
+    failOn = value as Severity;
+  }
+
+  const positional = args.filter(
+    (a, i) =>
+      !a.startsWith("--") && i !== failOnIdx + 1,
+  );
 
   if (positional.length === 0) {
     console.error(
-      "Usage: spectr-ai [--json|--sarif] <contract.sol|directory> [...]",
+      "Usage: spectr-ai [--json|--sarif] [--fail-on <severity>] <contract.sol|directory>",
     );
     console.error("Examples:");
     console.error("  spectr-ai contracts/Token.sol");
     console.error("  spectr-ai --json contracts/");
     console.error("  spectr-ai --sarif contracts/Token.sol");
+    console.error(
+      "  spectr-ai --fail-on medium contracts/Token.sol",
+    );
     process.exit(1);
   }
 
@@ -62,7 +94,9 @@ function parseArgs(argv: string[]): CliArgs {
       if (stat.isDirectory()) {
         const solFiles = findSolidityFiles(resolved);
         if (solFiles.length === 0) {
-          console.error(`Error: no .sol files found in "${resolved}"`);
+          console.error(
+            `Error: no .sol files found in "${resolved}"`,
+          );
           process.exit(1);
         }
         for (const f of solFiles) {
@@ -77,10 +111,8 @@ function parseArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { paths, json, sarif };
+  return { paths, format, failOn };
 }
-
-const HIGH_SEVERITY: Set<Severity> = new Set(["critical", "high"]);
 
 function handleApiError(error: unknown): never {
   if (error instanceof Anthropic.BadRequestError) {
@@ -101,8 +133,67 @@ function handleApiError(error: unknown): never {
   process.exit(1);
 }
 
+async function analyzeAll(
+  paths: string[],
+  apiKey: string,
+): Promise<Array<{ file: string; report: JsonReport }>> {
+  const reports: Array<{ file: string; report: JsonReport }> = [];
+
+  for (const filePath of paths) {
+    console.error(`  spectr-ai — analyzing ${filePath}...`);
+    try {
+      const source = readContract(filePath);
+      const result = await analyzeContractJson(source, apiKey);
+      reports.push({ file: filePath, report: result.report });
+      console.error(
+        `  Tokens: ${result.inputTokens} in / ${result.outputTokens} out`,
+      );
+    } catch (error) {
+      handleApiError(error);
+    }
+  }
+
+  return reports;
+}
+
+function exceedsThreshold(
+  reports: Array<{ report: JsonReport }>,
+  failOn: Severity,
+): boolean {
+  const threshold = SEVERITY_RANK[failOn];
+  return reports.some((r) =>
+    r.report.issues.some(
+      (i) => SEVERITY_RANK[i.severity] <= threshold,
+    ),
+  );
+}
+
 async function main(): Promise<void> {
-  const { paths, json, sarif } = parseArgs(process.argv);
+  const config = loadConfig(process.cwd());
+  const cliArgs = parseArgs(process.argv);
+
+  // CLI flags override config file
+  const format = cliArgs.format === "text" && config.format !== "text"
+    ? config.format
+    : cliArgs.format;
+  const failOn = cliArgs.failOn === "high" && config.failOn !== "high"
+    ? config.failOn
+    : cliArgs.failOn;
+
+  // Filter excluded files
+  const paths = cliArgs.paths.filter((p) => {
+    if (shouldExcludeFile(p, config.exclude)) {
+      console.error(`  skipping excluded file: ${p}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (paths.length === 0) {
+    console.error("Error: no files to analyze after applying excludes");
+    process.exit(1);
+  }
+
   const apiKey = getApiKey();
 
   for (const filePath of paths) {
@@ -114,84 +205,48 @@ async function main(): Promise<void> {
     }
   }
 
-  if (json) {
-    const reports: Array<{ file: string; report: JsonReport }> = [];
-    let hasHighSeverity = false;
+  console.error("");
+  const reports = await analyzeAll(paths, apiKey);
 
-    for (const filePath of paths) {
-      console.error(`  spectr-ai — analyzing ${filePath}...`);
-      try {
-        const source = readContract(filePath);
-        const result = await analyzeContractJson(source, apiKey);
-        reports.push({ file: filePath, report: result.report });
-        console.error(
-          `  Tokens: ${result.inputTokens} in / ${result.outputTokens} out`,
+  // Filter ignored issues
+  if (config.ignore.length > 0) {
+    for (const entry of reports) {
+      entry.report.issues = entry.report.issues.filter((issue) => {
+        const text =
+          `${issue.title} ${issue.description}`.toLowerCase();
+        return !config.ignore.some((pattern) =>
+          text.includes(pattern.toLowerCase()),
         );
-        if (
-          result.report.issues.some((i) => HIGH_SEVERITY.has(i.severity))
-        ) {
-          hasHighSeverity = true;
-        }
-      } catch (error) {
-        handleApiError(error);
-      }
-    }
-
-    if (reports.length === 1) {
-      console.log(JSON.stringify(reports[0]?.report, null, 2));
-    } else {
-      console.log(JSON.stringify(reports, null, 2));
-    }
-    process.exit(hasHighSeverity ? 2 : 0);
-  }
-
-  if (sarif) {
-    const reports: Array<{ file: string; report: JsonReport }> = [];
-    let hasHighSeverity = false;
-
-    for (const filePath of paths) {
-      console.error(`  spectr-ai — analyzing ${filePath}...`);
-      try {
-        const source = readContract(filePath);
-        const result = await analyzeContractJson(source, apiKey);
-        reports.push({ file: filePath, report: result.report });
-        if (
-          result.report.issues.some((i) => HIGH_SEVERITY.has(i.severity))
-        ) {
-          hasHighSeverity = true;
-        }
-      } catch (error) {
-        handleApiError(error);
-      }
-    }
-
-    const sarifLog = toSarif(reports, "0.1.0");
-    console.log(JSON.stringify(sarifLog, null, 2));
-    process.exit(hasHighSeverity ? 2 : 0);
-  }
-
-  // Text output
-  for (const filePath of paths) {
-    console.error(`\n  spectr-ai — analyzing ${filePath}...\n`);
-    try {
-      const source = readContract(filePath);
-      const result = await analyzeContract(source, apiKey);
-
-      if (paths.length > 1) {
-        console.log(`\n${"=".repeat(60)}`);
-        console.log(`File: ${filePath}`);
-        console.log(`${"=".repeat(60)}\n`);
-      }
-
-      console.log(result.report);
-      console.log("\n---");
-      console.log(
-        `Model: ${result.model} | Tokens: ${result.inputTokens} in / ${result.outputTokens} out`,
-      );
-    } catch (error) {
-      handleApiError(error);
+      });
     }
   }
+
+  const exitCode = exceedsThreshold(reports, failOn) ? 2 : 0;
+
+  switch (format) {
+    case "json": {
+      const output =
+        reports.length === 1 ? reports[0]?.report : reports;
+      console.log(JSON.stringify(output, null, 2));
+      break;
+    }
+    case "sarif": {
+      const sarifLog = toSarif(reports, "0.1.0");
+      console.log(JSON.stringify(sarifLog, null, 2));
+      break;
+    }
+    case "text": {
+      for (const { file, report } of reports) {
+        console.log(
+          formatReport(report, reports.length > 1 ? file : undefined),
+        );
+      }
+      console.log("");
+      break;
+    }
+  }
+
+  process.exit(exitCode);
 }
 
 main();

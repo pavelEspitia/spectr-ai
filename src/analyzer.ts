@@ -16,6 +16,7 @@ export interface Issue {
   location: string;
   description: string;
   recommendation: string;
+  codefix?: string;
 }
 
 export interface JsonReport {

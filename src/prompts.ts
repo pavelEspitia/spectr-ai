@@ -30,7 +30,8 @@ Respond with ONLY valid JSON matching this schema — no markdown, no explanatio
       "title": "Short description",
       "location": "function name or line reference",
       "description": "What the issue is and why it matters",
-      "recommendation": "How to fix it"
+      "recommendation": "How to fix it",
+      "codefix": "// corrected Solidity code snippet (only the relevant lines)"
     }
   ],
   "summary": {
@@ -40,4 +41,7 @@ Respond with ONLY valid JSON matching this schema — no markdown, no explanatio
   }
 }
 
-Include vulnerabilities (reentrancy, overflow, access control), gas optimizations, and best practice violations. Be precise — reference specific function names.`;
+Rules:
+- Include vulnerabilities (reentrancy, overflow, access control), gas optimizations, and best practice violations
+- Be precise — reference specific function names
+- The "codefix" field must contain the corrected Solidity code for the affected function or lines. Show only the fixed code, not the original. For info-level issues where no code change is needed, omit the codefix field.`;
