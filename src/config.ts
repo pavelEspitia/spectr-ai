@@ -4,7 +4,7 @@ import type { Severity } from "./analyzer.js";
 
 export interface Config {
   failOn: Severity;
-  format: "text" | "json" | "sarif";
+  format: "text" | "json" | "sarif" | "html";
   model?: string;
   ignore: string[];
   exclude: string[];
@@ -74,7 +74,12 @@ export function loadConfig(cwd: string): Config {
         i += 1;
       } else if (trimmed.startsWith("format:")) {
         const value = parseYamlValue(trimmed);
-        if (value === "text" || value === "json" || value === "sarif") {
+        if (
+          value === "text" ||
+          value === "json" ||
+          value === "sarif" ||
+          value === "html"
+        ) {
           config.format = value;
         }
         i += 1;

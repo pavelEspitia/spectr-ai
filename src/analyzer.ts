@@ -1,4 +1,5 @@
 import { JSON_SYSTEM_PROMPT } from "./prompts.js";
+import { parseReport } from "./schema.js";
 import type { Provider } from "./provider.js";
 
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
@@ -41,11 +42,21 @@ export async function analyzeContractJson(
     buildUserMessage(source),
   );
 
-  const json = result.text.replace(/^```json\n?|\n?```$/g, "").trim();
-  const parsed = JSON.parse(json) as JsonReport;
+  const validated = parseReport(result.text);
+  const report: JsonReport = {
+    ...validated,
+    issues: validated.issues.map((i) => ({
+      severity: i.severity,
+      title: i.title,
+      location: i.location,
+      description: i.description,
+      recommendation: i.recommendation,
+      ...(i.codefix !== undefined ? { codefix: i.codefix } : {}),
+    })),
+  };
 
   return {
-    report: parsed,
+    report,
     model: result.model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,

@@ -1,8 +1,59 @@
 # spectr-ai
 
-AI-powered smart contract security analyzer. Uses Claude to audit Solidity contracts for vulnerabilities, gas optimizations, and best practice violations.
+AI-powered smart contract security analyzer. Uses Claude or local models (Ollama) to audit Solidity contracts for vulnerabilities, gas optimizations, and best practice violations.
 
 [![CI](https://github.com/pavelEspitia/spectr-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/pavelEspitia/spectr-ai/actions/workflows/ci.yml)
+
+## Demo
+
+```
+$ spectr-ai examples/vulnerable.sol
+
+   CRITICAL  — 2 issues
+
+  ● Reentrancy vulnerability in withdraw()
+    #1 withdraw() at examples/vulnerable.sol:20
+
+    External call via msg.sender.call() before updating balances.
+    → Apply checks-effects-interactions pattern.
+
+    ┌─ suggested fix
+    │ function withdraw() public {
+    │     uint256 amount = balances[msg.sender];
+    │     balances[msg.sender] = 0;
+    │     (bool success, ) = msg.sender.call{value: amount}("");
+    │     require(success, "Transfer failed");
+    │ }
+    └─
+
+  ● Missing access control on drain()
+    #2 drain() at examples/vulnerable.sol:26
+
+    Any address can call drain() and steal the contract balance.
+    → Add require(msg.sender == owner).
+
+   HIGH  — 1 issue
+
+  ● tx.origin used for authentication
+    #3 transferOwnership() at examples/vulnerable.sol:31
+
+  ┌────────────────────────────────────────┐
+  │ Summary                                │
+  ├────────────────────────────────────────┤
+  │ ● critical     2  ████████████████     │
+  │ ● high         1  ████████             │
+  │ ▲ medium       1  ████████             │
+  │ ○ low          2  ████████████████     │
+  ├────────────────────────────────────────┤
+  │ Total          6                       │
+  │  RISK: CRITICAL                        │
+  └────────────────────────────────────────┘
+
+  ⚠ Priority fixes:
+  1. Fix reentrancy in withdraw()
+  2. Add access control to drain()
+  3. Replace tx.origin with msg.sender
+```
 
 ## Install
 
@@ -10,68 +61,86 @@ AI-powered smart contract security analyzer. Uses Claude to audit Solidity contr
 pnpm add -g spectr-ai
 ```
 
-Requires Node.js 22+ and an [Anthropic API key](https://console.anthropic.com/).
+Requires Node.js 22+.
+
+## Models
+
+spectr-ai supports Claude (via API) and local models (via Ollama):
 
 ```bash
+# Claude (default, requires ANTHROPIC_API_KEY)
 export ANTHROPIC_API_KEY=sk-ant-...
+spectr-ai contracts/Token.sol
+
+# Local model (free, no API key needed)
+ollama pull qwen2.5-coder:1.5b
+spectr-ai --model ollama:qwen2.5-coder:1.5b contracts/Token.sol
 ```
 
 ## Usage
 
-### Single file
-
 ```bash
-spectr-ai contracts/Token.sol
+spectr-ai [options] <contract.sol|directory>
 ```
 
-### Directory (all .sol files)
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Structured JSON output |
+| `--sarif` | SARIF v2.1.0 for GitHub Code Scanning |
+| `--html` | Self-contained HTML audit report |
+| `--diff <ref>` | Only analyze .sol files changed since git ref |
+| `--fail-on <severity>` | Exit code 2 threshold (default: `high`) |
+| `--model <model>` | Model to use (default: `claude-sonnet-4-6`) |
+
+### Examples
 
 ```bash
+# Analyze a directory
 spectr-ai contracts/
-```
 
-### JSON output
+# Only changed files (great for PRs)
+spectr-ai --diff HEAD~1
 
-```bash
-spectr-ai --json contracts/Token.sol
-```
+# JSON output with stricter threshold
+spectr-ai --json --fail-on medium contracts/Token.sol
 
-Returns structured JSON with `issues[]` and `summary`:
+# HTML report
+spectr-ai --html contracts/ > report.html
 
-```json
-{
-  "issues": [
-    {
-      "severity": "critical",
-      "title": "Reentrancy in withdraw",
-      "location": "withdraw()",
-      "description": "External call before state update",
-      "recommendation": "Use checks-effects-interactions pattern"
-    }
-  ],
-  "summary": {
-    "riskRating": "critical",
-    "counts": { "critical": 1, "high": 0, "medium": 0, "low": 0, "info": 0 },
-    "topFixes": ["Fix reentrancy in withdraw"]
-  }
-}
-```
+# SARIF for GitHub Code Scanning
+spectr-ai --sarif contracts/ > results.sarif
 
-### SARIF output (for GitHub Code Scanning)
-
-```bash
-spectr-ai --sarif contracts/Token.sol > results.sarif
+# Local model
+spectr-ai --model ollama:qwen2.5-coder:7b contracts/
 ```
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| `0`  | No critical or high issues found |
-| `1`  | Error (bad input, API failure, etc.) |
-| `2`  | Critical or high severity issues found |
+| `0` | No issues at or above `--fail-on` threshold |
+| `1` | Error (bad input, API failure, etc.) |
+| `2` | Issues found at or above threshold |
 
-Exit code `2` enables CI gating — fail the pipeline when serious vulnerabilities are detected.
+### Config file
+
+Create `.spectr-ai.yml` in your project root:
+
+```yaml
+model: ollama:qwen2.5-coder:7b
+failOn: medium
+format: text
+ignore:
+  - gas-optimization
+  - missing-event
+exclude:
+  - test/
+  - mocks/
+```
+
+CLI flags always override config file values.
 
 ## CI Integration
 
@@ -93,7 +162,7 @@ Exit code `2` enables CI gating — fail the pipeline when serious vulnerabiliti
 ### Generic CI
 
 ```bash
-spectr-ai --json contracts/ || exit 1
+spectr-ai --json --fail-on medium contracts/ || exit 1
 ```
 
 ## Development
@@ -105,13 +174,11 @@ pnpm install
 pnpm run dev examples/vulnerable.sol
 ```
 
-### Commands
-
 | Command | Description |
 |---------|-------------|
 | `pnpm run dev` | Run CLI in development mode |
 | `pnpm run build` | Compile TypeScript to `dist/` |
-| `pnpm run test` | Run tests |
+| `pnpm run test` | Run tests (69 tests) |
 | `pnpm run lint` | Lint with oxlint |
 | `pnpm run typecheck` | Type-check with tsc |
 

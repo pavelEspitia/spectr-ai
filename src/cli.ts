@@ -13,10 +13,13 @@ import type { Provider, ModelConfig } from "./provider.js";
 import { validateSolidityFile } from "./validator.js";
 import { findSolidityFiles } from "./files.js";
 import { toSarif } from "./sarif.js";
+import { ReportParseError } from "./schema.js";
 import { formatReport } from "./formatter.js";
 import { loadConfig, shouldExcludeFile } from "./config.js";
+import { toHtml } from "./html.js";
+import { getChangedSolFiles, DiffError } from "./diff.js";
 
-type OutputFormat = "text" | "json" | "sarif";
+type OutputFormat = "text" | "json" | "sarif" | "html";
 
 const SEVERITY_RANK: Record<Severity, number> = {
   critical: 0,
@@ -35,6 +38,7 @@ interface CliArgs {
   format: OutputFormat;
   failOn: Severity;
   modelConfig: ModelConfig;
+  diffRef?: string | undefined;
 }
 
 function readContract(filePath: string): string {
@@ -62,6 +66,7 @@ function parseArgs(argv: string[]): CliArgs {
   let format: OutputFormat = "text";
   if (args.includes("--json")) format = "json";
   if (args.includes("--sarif")) format = "sarif";
+  if (args.includes("--html")) format = "html";
 
   let failOn: Severity = "high";
   const failOnArg = getValueArg(args, "--fail-on");
@@ -87,15 +92,30 @@ function parseArgs(argv: string[]): CliArgs {
     modelConfig = parseModelFlag(modelArg.value);
   }
 
+  let diffRef: string | undefined;
+  const diffArg = getValueArg(args, "--diff");
+  if (diffArg.index !== -1) {
+    if (!diffArg.value) {
+      console.error(
+        "Error: --diff requires a git ref (e.g. HEAD~1, main, abc123)",
+      );
+      process.exit(1);
+    }
+    diffRef = diffArg.value;
+  }
+
   const valueArgIndices = new Set<number>();
   if (failOnArg.index !== -1) valueArgIndices.add(failOnArg.index + 1);
   if (modelArg.index !== -1) valueArgIndices.add(modelArg.index + 1);
+  if (diffArg.index !== -1) valueArgIndices.add(diffArg.index + 1);
 
   const positional = args.filter(
     (a, i) => !a.startsWith("--") && !valueArgIndices.has(i),
   );
 
-  if (positional.length === 0) {
+  if (diffRef && positional.length === 0) {
+    // --diff mode doesn't require positional args
+  } else if (positional.length === 0) {
     console.error(
       "Usage: spectr-ai [options] <contract.sol|directory>",
     );
@@ -103,6 +123,12 @@ function parseArgs(argv: string[]): CliArgs {
     console.error("Options:");
     console.error("  --json                    JSON output");
     console.error("  --sarif                   SARIF output");
+    console.error(
+      "  --html                    HTML report",
+    );
+    console.error(
+      "  --diff <ref>              Only analyze .sol files changed vs ref",
+    );
     console.error(
       "  --fail-on <severity>      Exit 2 threshold (default: high)",
     );
@@ -149,7 +175,7 @@ function parseArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { paths, format, failOn, modelConfig };
+  return { paths, format, failOn, modelConfig, diffRef };
 }
 
 function handleError(error: unknown): never {
@@ -170,6 +196,11 @@ function handleError(error: unknown): never {
     );
   } else if (error instanceof OllamaModelNotFoundError) {
     console.error(`Error: ${error.message}`);
+  } else if (error instanceof ReportParseError) {
+    console.error(`Error: ${error.message}`);
+    console.error(
+      "The model returned an unparseable response. Try a different model or retry.",
+    );
   } else {
     console.error(
       `Error: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -233,7 +264,34 @@ async function main(): Promise<void> {
     modelConfig = parseModelFlag(config.model);
   }
 
-  const paths = cliArgs.paths.filter((p) => {
+  // Resolve files from --diff or positional args
+  let inputPaths = cliArgs.paths;
+  if (cliArgs.diffRef) {
+    try {
+      const changed = getChangedSolFiles(
+        cliArgs.diffRef,
+        process.cwd(),
+      );
+      if (changed.length === 0) {
+        console.error(
+          `No .sol files changed since ${cliArgs.diffRef}`,
+        );
+        process.exit(0);
+      }
+      console.error(
+        `  diff: ${changed.length} .sol file(s) changed since ${cliArgs.diffRef}`,
+      );
+      inputPaths = changed;
+    } catch (error) {
+      if (error instanceof DiffError) {
+        console.error(`Error: ${error.message}`);
+        process.exit(1);
+      }
+      throw error;
+    }
+  }
+
+  const paths = inputPaths.filter((p) => {
     if (shouldExcludeFile(p, config.exclude)) {
       console.error(`  skipping excluded file: ${p}`);
       return false;
@@ -301,6 +359,14 @@ async function main(): Promise<void> {
     case "sarif": {
       const sarifLog = toSarif(reports, "0.1.0");
       console.log(JSON.stringify(sarifLog, null, 2));
+      break;
+    }
+    case "html": {
+      const html = toHtml(reports, {
+        model: modelLabel,
+        date: new Date().toISOString().slice(0, 10),
+      });
+      console.log(html);
       break;
     }
     case "text": {
