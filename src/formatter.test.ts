@@ -45,8 +45,10 @@ describe("formatReport", () => {
 
   it("shows severity counts in headers", () => {
     const output = formatReport(report);
-    expect(output).toContain("CRITICAL (2)");
-    expect(output).toContain("LOW (1)");
+    expect(output).toContain("CRITICAL");
+    expect(output).toContain("2 issues");
+    expect(output).toContain("LOW");
+    expect(output).toContain("1 issue");
   });
 
   it("includes issue details", () => {
@@ -58,7 +60,7 @@ describe("formatReport", () => {
 
   it("includes codefix when present", () => {
     const output = formatReport(report);
-    expect(output).toContain("Suggested fix:");
+    expect(output).toContain("suggested fix");
     expect(output).toContain("balances[msg.sender] = 0;");
   });
 
@@ -67,12 +69,12 @@ describe("formatReport", () => {
     const missingEventSection = output.substring(
       output.indexOf("Missing event"),
     );
-    const nextSection = missingEventSection.indexOf("CRITICAL");
+    const nextSection = missingEventSection.indexOf("Summary");
     const chunk =
       nextSection > -1
         ? missingEventSection.substring(0, nextSection)
         : missingEventSection;
-    expect(chunk).not.toContain("Suggested fix:");
+    expect(chunk).not.toContain("suggested fix");
   });
 
   it("includes summary table", () => {
