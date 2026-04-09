@@ -164,8 +164,9 @@ function handleError(error: unknown): never {
   } else if (error instanceof Anthropic.RateLimitError) {
     console.error("Error: rate limited. Wait a moment and try again.");
   } else if (error instanceof OllamaConnectionError) {
+    console.error(`Error: ${error.message}`);
     console.error(
-      "Error: cannot connect to Ollama. Is it running? Start with: ollama serve",
+      "Is Ollama running? Start with: ollama serve",
     );
   } else if (error instanceof OllamaModelNotFoundError) {
     console.error(`Error: ${error.message}`);

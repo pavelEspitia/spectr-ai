@@ -73,19 +73,37 @@ export class OllamaProvider implements Provider {
   ): Promise<CompletionResult> {
     const url = `${this.baseUrl}/v1/chat/completions`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: this.model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0,
-        stream: false,
-      }),
-    });
+    // Local models can take minutes for long prompts
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      5 * 60 * 1000,
+    );
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: userMessage },
+          ],
+          temperature: 0,
+          stream: false,
+        }),
+      });
+    } catch (error) {
+      const msg = error instanceof Error
+        ? `${error.message}${error.cause instanceof Error ? ` (${error.cause.message})` : ""}`
+        : "Cannot connect to Ollama";
+      throw new OllamaConnectionError(msg);
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const body = await response.text();
