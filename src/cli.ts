@@ -3,6 +3,13 @@ import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { analyzeContractJson } from "./analyzer.js";
 import type { Severity, JsonReport } from "./analyzer.js";
+import {
+  parseModelFlag,
+  createProvider,
+  OllamaConnectionError,
+  OllamaModelNotFoundError,
+} from "./provider.js";
+import type { Provider, ModelConfig } from "./provider.js";
 import { validateSolidityFile } from "./validator.js";
 import { findSolidityFiles } from "./files.js";
 import { toSarif } from "./sarif.js";
@@ -21,21 +28,13 @@ const SEVERITY_RANK: Record<Severity, number> = {
 
 const VALID_SEVERITIES = new Set<string>(Object.keys(SEVERITY_RANK));
 
+const DEFAULT_MODEL = "claude-sonnet-4-6";
+
 interface CliArgs {
   paths: string[];
   format: OutputFormat;
   failOn: Severity;
-}
-
-function getApiKey(): string {
-  const key = process.env["ANTHROPIC_API_KEY"];
-  if (!key) {
-    console.error(
-      "Error: ANTHROPIC_API_KEY not set. Export it or add to .env",
-    );
-    process.exit(1);
-  }
-  return key;
+  modelConfig: ModelConfig;
 }
 
 function readContract(filePath: string): string {
@@ -48,41 +47,80 @@ function readContract(filePath: string): string {
   }
 }
 
+function getValueArg(
+  args: string[],
+  flag: string,
+): { value: string | undefined; index: number } {
+  const idx = args.indexOf(flag);
+  if (idx === -1) return { value: undefined, index: -1 };
+  return { value: args[idx + 1], index: idx };
+}
+
 function parseArgs(argv: string[]): CliArgs {
   const args = argv.slice(2);
+
   let format: OutputFormat = "text";
   if (args.includes("--json")) format = "json";
   if (args.includes("--sarif")) format = "sarif";
 
   let failOn: Severity = "high";
-  const failOnIdx = args.indexOf("--fail-on");
-  if (failOnIdx !== -1) {
-    const value = args[failOnIdx + 1];
-    if (!value || !VALID_SEVERITIES.has(value)) {
+  const failOnArg = getValueArg(args, "--fail-on");
+  if (failOnArg.index !== -1) {
+    if (!failOnArg.value || !VALID_SEVERITIES.has(failOnArg.value)) {
       console.error(
-        "Error: --fail-on requires a severity: critical, high, medium, low, info",
+        "Error: --fail-on requires: critical, high, medium, low, info",
       );
       process.exit(1);
     }
-    failOn = value as Severity;
+    failOn = failOnArg.value as Severity;
   }
 
+  let modelConfig: ModelConfig = { provider: "anthropic", model: DEFAULT_MODEL };
+  const modelArg = getValueArg(args, "--model");
+  if (modelArg.index !== -1) {
+    if (!modelArg.value) {
+      console.error(
+        "Error: --model requires a value (e.g. claude-sonnet-4-6, ollama:deepseek-coder-v2)",
+      );
+      process.exit(1);
+    }
+    modelConfig = parseModelFlag(modelArg.value);
+  }
+
+  const valueArgIndices = new Set<number>();
+  if (failOnArg.index !== -1) valueArgIndices.add(failOnArg.index + 1);
+  if (modelArg.index !== -1) valueArgIndices.add(modelArg.index + 1);
+
   const positional = args.filter(
-    (a, i) =>
-      !a.startsWith("--") && i !== failOnIdx + 1,
+    (a, i) => !a.startsWith("--") && !valueArgIndices.has(i),
   );
 
   if (positional.length === 0) {
     console.error(
-      "Usage: spectr-ai [--json|--sarif] [--fail-on <severity>] <contract.sol|directory>",
+      "Usage: spectr-ai [options] <contract.sol|directory>",
     );
+    console.error("");
+    console.error("Options:");
+    console.error("  --json                    JSON output");
+    console.error("  --sarif                   SARIF output");
+    console.error(
+      "  --fail-on <severity>      Exit 2 threshold (default: high)",
+    );
+    console.error(
+      "  --model <model>           Model to use (default: claude-sonnet-4-6)",
+    );
+    console.error("");
+    console.error("Models:");
+    console.error("  claude-sonnet-4-6         Anthropic Sonnet (default)");
+    console.error("  claude-haiku-4-5-20251001 Anthropic Haiku (faster, cheaper)");
+    console.error(
+      "  ollama:<name>             Local model via Ollama",
+    );
+    console.error("");
     console.error("Examples:");
     console.error("  spectr-ai contracts/Token.sol");
-    console.error("  spectr-ai --json contracts/");
-    console.error("  spectr-ai --sarif contracts/Token.sol");
-    console.error(
-      "  spectr-ai --fail-on medium contracts/Token.sol",
-    );
+    console.error("  spectr-ai --model ollama:deepseek-coder-v2 contracts/");
+    console.error("  spectr-ai --json --fail-on medium contracts/");
     process.exit(1);
   }
 
@@ -111,10 +149,10 @@ function parseArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { paths, format, failOn };
+  return { paths, format, failOn, modelConfig };
 }
 
-function handleApiError(error: unknown): never {
+function handleError(error: unknown): never {
   if (error instanceof Anthropic.BadRequestError) {
     console.error(
       "Error: API request failed. Check your credit balance at https://console.anthropic.com",
@@ -125,6 +163,12 @@ function handleApiError(error: unknown): never {
     );
   } else if (error instanceof Anthropic.RateLimitError) {
     console.error("Error: rate limited. Wait a moment and try again.");
+  } else if (error instanceof OllamaConnectionError) {
+    console.error(
+      "Error: cannot connect to Ollama. Is it running? Start with: ollama serve",
+    );
+  } else if (error instanceof OllamaModelNotFoundError) {
+    console.error(`Error: ${error.message}`);
   } else {
     console.error(
       `Error: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -135,7 +179,7 @@ function handleApiError(error: unknown): never {
 
 async function analyzeAll(
   paths: string[],
-  apiKey: string,
+  provider: Provider,
 ): Promise<Array<{ file: string; report: JsonReport }>> {
   const reports: Array<{ file: string; report: JsonReport }> = [];
 
@@ -143,13 +187,13 @@ async function analyzeAll(
     console.error(`  spectr-ai — analyzing ${filePath}...`);
     try {
       const source = readContract(filePath);
-      const result = await analyzeContractJson(source, apiKey);
+      const result = await analyzeContractJson(source, provider);
       reports.push({ file: filePath, report: result.report });
       console.error(
         `  Tokens: ${result.inputTokens} in / ${result.outputTokens} out`,
       );
     } catch (error) {
-      handleApiError(error);
+      handleError(error);
     }
   }
 
@@ -172,7 +216,6 @@ async function main(): Promise<void> {
   const config = loadConfig(process.cwd());
   const cliArgs = parseArgs(process.argv);
 
-  // CLI flags override config file
   const format = cliArgs.format === "text" && config.format !== "text"
     ? config.format
     : cliArgs.format;
@@ -180,7 +223,15 @@ async function main(): Promise<void> {
     ? config.failOn
     : cliArgs.failOn;
 
-  // Filter excluded files
+  // Config model is used as fallback when no --model flag is passed
+  let modelConfig = cliArgs.modelConfig;
+  if (
+    modelConfig.model === DEFAULT_MODEL &&
+    config.model
+  ) {
+    modelConfig = parseModelFlag(config.model);
+  }
+
   const paths = cliArgs.paths.filter((p) => {
     if (shouldExcludeFile(p, config.exclude)) {
       console.error(`  skipping excluded file: ${p}`);
@@ -194,7 +245,24 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const apiKey = getApiKey();
+  // Only require API key for Anthropic models
+  const apiKey = modelConfig.provider === "anthropic"
+    ? process.env["ANTHROPIC_API_KEY"]
+    : undefined;
+
+  if (modelConfig.provider === "anthropic" && !apiKey) {
+    console.error(
+      "Error: ANTHROPIC_API_KEY not set. Export it or use --model ollama:<model>",
+    );
+    process.exit(1);
+  }
+
+  const provider = createProvider(modelConfig, apiKey);
+
+  const modelLabel = modelConfig.provider === "ollama"
+    ? `ollama:${modelConfig.model}`
+    : modelConfig.model;
+  console.error(`  model: ${modelLabel}`);
 
   for (const filePath of paths) {
     const source = readContract(filePath);
@@ -206,9 +274,8 @@ async function main(): Promise<void> {
   }
 
   console.error("");
-  const reports = await analyzeAll(paths, apiKey);
+  const reports = await analyzeAll(paths, provider);
 
-  // Filter ignored issues
   if (config.ignore.length > 0) {
     for (const entry of reports) {
       entry.report.issues = entry.report.issues.filter((issue) => {

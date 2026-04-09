@@ -5,6 +5,7 @@ import type { Severity } from "./analyzer.js";
 export interface Config {
   failOn: Severity;
   format: "text" | "json" | "sarif";
+  model?: string;
   ignore: string[];
   exclude: string[];
 }
@@ -76,6 +77,10 @@ export function loadConfig(cwd: string): Config {
         if (value === "text" || value === "json" || value === "sarif") {
           config.format = value;
         }
+        i += 1;
+      } else if (trimmed.startsWith("model:")) {
+        const value = parseYamlValue(trimmed);
+        if (value) config.model = value;
         i += 1;
       } else if (trimmed.startsWith("ignore:")) {
         i += 1;

@@ -1,160 +1,104 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SYSTEM_PROMPT, JSON_SYSTEM_PROMPT } from "./prompts.js";
+import { describe, it, expect, vi } from "vitest";
+import { JSON_SYSTEM_PROMPT } from "./prompts.js";
+import { analyzeContractJson } from "./analyzer.js";
+import type { Provider } from "./provider.js";
 
-const mockCreate = vi.fn();
-
-vi.mock("@anthropic-ai/sdk", () => {
+function mockProvider(
+  overrides: Partial<Awaited<ReturnType<Provider["complete"]>>> = {},
+): Provider {
   return {
-    default: class MockAnthropic {
-      messages = { create: mockCreate };
-    },
+    complete: vi.fn().mockResolvedValue({
+      text: '{"issues":[],"summary":{"riskRating":"info","counts":{"critical":0,"high":0,"medium":0,"low":0,"info":0},"topFixes":[]}}',
+      model: "test-model",
+      inputTokens: 100,
+      outputTokens: 50,
+      ...overrides,
+    }),
   };
-});
+}
 
 describe("prompts", () => {
-  it("system prompt includes severity levels", () => {
-    expect(SYSTEM_PROMPT).toContain("Critical");
-    expect(SYSTEM_PROMPT).toContain("High");
-    expect(SYSTEM_PROMPT).toContain("Medium");
-    expect(SYSTEM_PROMPT).toContain("Low");
-  });
-
-  it("system prompt covers key vulnerability categories", () => {
-    expect(SYSTEM_PROMPT).toContain("reentrancy");
-    expect(SYSTEM_PROMPT).toContain("access control");
-    expect(SYSTEM_PROMPT).toContain("Gas Optimizations");
-  });
-
   it("JSON prompt requires structured output", () => {
     expect(JSON_SYSTEM_PROMPT).toContain('"issues"');
     expect(JSON_SYSTEM_PROMPT).toContain('"severity"');
     expect(JSON_SYSTEM_PROMPT).toContain('"summary"');
+    expect(JSON_SYSTEM_PROMPT).toContain('"codefix"');
   });
 });
 
-describe("analyzeContract", () => {
-  beforeEach(() => {
-    mockCreate.mockReset();
-  });
-
-  it("returns structured result from Claude response", async () => {
-    mockCreate.mockResolvedValueOnce({
-      content: [{ type: "text", text: "## Security Report\nNo issues." }],
-      model: "claude-sonnet-4-6",
-      usage: { input_tokens: 500, output_tokens: 200 },
-    });
-
-    const { analyzeContract } = await import("./analyzer.js");
-    const result = await analyzeContract("contract Foo {}", "test-key");
-
-    expect(result).toEqual({
-      report: "## Security Report\nNo issues.",
+describe("analyzeContractJson", () => {
+  it("returns structured result from provider", async () => {
+    const provider = mockProvider({
+      text: JSON.stringify({
+        issues: [
+          {
+            severity: "critical",
+            title: "Reentrancy",
+            location: "withdraw()",
+            description: "Unsafe external call",
+            recommendation: "Use CEI pattern",
+          },
+        ],
+        summary: {
+          riskRating: "critical",
+          counts: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
+          topFixes: ["Fix reentrancy"],
+        },
+      }),
       model: "claude-sonnet-4-6",
       inputTokens: 500,
       outputTokens: 200,
     });
 
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: "claude-sonnet-4-6",
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: expect.stringContaining("contract Foo {}"),
-          },
-        ],
-      }),
-    );
-  });
-
-  it("throws when response has no text block", async () => {
-    mockCreate.mockResolvedValueOnce({
-      content: [],
-      model: "claude-sonnet-4-6",
-      usage: { input_tokens: 100, output_tokens: 0 },
-    });
-
-    const { analyzeContract } = await import("./analyzer.js");
-
-    await expect(
-      analyzeContract("contract Foo {}", "test-key"),
-    ).rejects.toThrow("No text response received from Claude");
-  });
-
-  it("propagates API errors", async () => {
-    mockCreate.mockRejectedValueOnce(new Error("rate limited"));
-
-    const { analyzeContract } = await import("./analyzer.js");
-
-    await expect(
-      analyzeContract("contract Foo {}", "test-key"),
-    ).rejects.toThrow("rate limited");
-  });
-});
-
-describe("analyzeContractJson", () => {
-  beforeEach(() => {
-    mockCreate.mockReset();
-  });
-
-  const validJson = JSON.stringify({
-    issues: [
-      {
-        severity: "critical",
-        title: "Reentrancy in withdraw",
-        location: "withdraw()",
-        description: "External call before state update",
-        recommendation: "Use checks-effects-interactions",
-      },
-    ],
-    summary: {
-      riskRating: "critical",
-      counts: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
-      topFixes: ["Fix reentrancy in withdraw"],
-    },
-  });
-
-  it("parses JSON response into structured report", async () => {
-    mockCreate.mockResolvedValueOnce({
-      content: [{ type: "text", text: validJson }],
-      model: "claude-sonnet-4-6",
-      usage: { input_tokens: 500, output_tokens: 300 },
-    });
-
-    const { analyzeContractJson } = await import("./analyzer.js");
-    const result = await analyzeContractJson("contract Foo {}", "test-key");
+    const result = await analyzeContractJson("contract Foo {}", provider);
 
     expect(result.report.issues).toHaveLength(1);
     expect(result.report.issues[0]?.severity).toBe("critical");
-    expect(result.report.summary.riskRating).toBe("critical");
     expect(result.model).toBe("claude-sonnet-4-6");
+    expect(result.inputTokens).toBe(500);
   });
 
   it("strips markdown code fences from response", async () => {
-    mockCreate.mockResolvedValueOnce({
-      content: [{ type: "text", text: `\`\`\`json\n${validJson}\n\`\`\`` }],
-      model: "claude-sonnet-4-6",
-      usage: { input_tokens: 500, output_tokens: 300 },
+    const json = JSON.stringify({
+      issues: [],
+      summary: {
+        riskRating: "info",
+        counts: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        topFixes: [],
+      },
     });
+    const provider = mockProvider({ text: `\`\`\`json\n${json}\n\`\`\`` });
 
-    const { analyzeContractJson } = await import("./analyzer.js");
-    const result = await analyzeContractJson("contract Foo {}", "test-key");
-
-    expect(result.report.issues).toHaveLength(1);
+    const result = await analyzeContractJson("contract Foo {}", provider);
+    expect(result.report.issues).toHaveLength(0);
   });
 
   it("throws on invalid JSON response", async () => {
-    mockCreate.mockResolvedValueOnce({
-      content: [{ type: "text", text: "not valid json" }],
-      model: "claude-sonnet-4-6",
-      usage: { input_tokens: 500, output_tokens: 100 },
-    });
-
-    const { analyzeContractJson } = await import("./analyzer.js");
+    const provider = mockProvider({ text: "not valid json" });
 
     await expect(
-      analyzeContractJson("contract Foo {}", "test-key"),
+      analyzeContractJson("contract Foo {}", provider),
     ).rejects.toThrow();
+  });
+
+  it("propagates provider errors", async () => {
+    const provider: Provider = {
+      complete: vi.fn().mockRejectedValue(new Error("rate limited")),
+    };
+
+    await expect(
+      analyzeContractJson("contract Foo {}", provider),
+    ).rejects.toThrow("rate limited");
+  });
+
+  it("passes system prompt to provider", async () => {
+    const provider = mockProvider();
+
+    await analyzeContractJson("contract Foo {}", provider);
+
+    expect(provider.complete).toHaveBeenCalledWith(
+      JSON_SYSTEM_PROMPT,
+      expect.stringContaining("contract Foo {}"),
+    );
   });
 });
