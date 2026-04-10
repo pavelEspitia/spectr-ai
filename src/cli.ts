@@ -10,14 +10,16 @@ import {
   OllamaModelNotFoundError,
 } from "./provider.js";
 import type { Provider, ModelConfig } from "./provider.js";
-import { validateSolidityFile } from "./validator.js";
-import { findSolidityFiles } from "./files.js";
+import { validateContractFile } from "./validator.js";
+import type { ContractLanguage } from "./validator.js";
+import { findContractFiles } from "./files.js";
 import { toSarif } from "./sarif.js";
 import { ReportParseError } from "./schema.js";
 import { formatReport } from "./formatter.js";
 import { loadConfig, shouldExcludeFile } from "./config.js";
 import { toHtml } from "./html.js";
 import { getChangedSolFiles, DiffError } from "./diff.js";
+import { startWatcher } from "./watcher.js";
 
 type OutputFormat = "text" | "json" | "sarif" | "html";
 
@@ -39,6 +41,7 @@ interface CliArgs {
   failOn: Severity;
   modelConfig: ModelConfig;
   diffRef?: string | undefined;
+  watch: boolean;
 }
 
 function readContract(filePath: string): string {
@@ -67,6 +70,8 @@ function parseArgs(argv: string[]): CliArgs {
   if (args.includes("--json")) format = "json";
   if (args.includes("--sarif")) format = "sarif";
   if (args.includes("--html")) format = "html";
+
+  const watchMode = args.includes("--watch");
 
   let failOn: Severity = "high";
   const failOnArg = getValueArg(args, "--fail-on");
@@ -130,6 +135,9 @@ function parseArgs(argv: string[]): CliArgs {
       "  --diff <ref>              Only analyze .sol files changed vs ref",
     );
     console.error(
+      "  --watch                   Re-analyze on file changes",
+    );
+    console.error(
       "  --fail-on <severity>      Exit 2 threshold (default: high)",
     );
     console.error(
@@ -156,10 +164,10 @@ function parseArgs(argv: string[]): CliArgs {
     try {
       const stat = statSync(resolved);
       if (stat.isDirectory()) {
-        const solFiles = findSolidityFiles(resolved);
+        const solFiles = findContractFiles(resolved);
         if (solFiles.length === 0) {
           console.error(
-            `Error: no .sol files found in "${resolved}"`,
+            `Error: no .sol or .vy files found in "${resolved}"`,
           );
           process.exit(1);
         }
@@ -175,7 +183,7 @@ function parseArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { paths, format, failOn, modelConfig, diffRef };
+  return { paths, format, failOn, modelConfig, diffRef, watch: watchMode };
 }
 
 function handleError(error: unknown): never {
@@ -219,7 +227,9 @@ async function analyzeAll(
     console.error(`  spectr-ai — analyzing ${filePath}...`);
     try {
       const source = readContract(filePath);
-      const result = await analyzeContractJson(source, provider);
+      const lang: ContractLanguage =
+        filePath.endsWith(".vy") ? "vyper" : "solidity";
+      const result = await analyzeContractJson(source, provider, lang);
       reports.push({ file: filePath, report: result.report });
       console.error(
         `  Tokens: ${result.inputTokens} in / ${result.outputTokens} out`,
@@ -325,61 +335,88 @@ async function main(): Promise<void> {
 
   for (const filePath of paths) {
     const source = readContract(filePath);
-    const validation = validateSolidityFile(filePath, source);
+    const validation = validateContractFile(filePath, source);
     if (!validation.valid) {
       console.error(`Error: ${validation.error}`);
       process.exit(1);
     }
   }
 
-  console.error("");
-  const reports = await analyzeAll(paths, provider);
+  async function runAnalysis(
+    filePaths: string[],
+  ): Promise<number> {
+    console.error("");
+    const reports = await analyzeAll(filePaths, provider);
 
-  if (config.ignore.length > 0) {
-    for (const entry of reports) {
-      entry.report.issues = entry.report.issues.filter((issue) => {
-        const text =
-          `${issue.title} ${issue.description}`.toLowerCase();
-        return !config.ignore.some((pattern) =>
-          text.includes(pattern.toLowerCase()),
-        );
-      });
-    }
-  }
-
-  const exitCode = exceedsThreshold(reports, failOn) ? 2 : 0;
-
-  switch (format) {
-    case "json": {
-      const output =
-        reports.length === 1 ? reports[0]?.report : reports;
-      console.log(JSON.stringify(output, null, 2));
-      break;
-    }
-    case "sarif": {
-      const sarifLog = toSarif(reports, "0.1.0");
-      console.log(JSON.stringify(sarifLog, null, 2));
-      break;
-    }
-    case "html": {
-      const html = toHtml(reports, {
-        model: modelLabel,
-        date: new Date().toISOString().slice(0, 10),
-      });
-      console.log(html);
-      break;
-    }
-    case "text": {
-      for (const { file, report } of reports) {
-        console.log(
-          formatReport(report, reports.length > 1 ? file : undefined),
-        );
+    if (config.ignore.length > 0) {
+      for (const entry of reports) {
+        entry.report.issues = entry.report.issues.filter((issue) => {
+          const text =
+            `${issue.title} ${issue.description}`.toLowerCase();
+          return !config.ignore.some((pattern) =>
+            text.includes(pattern.toLowerCase()),
+          );
+        });
       }
-      console.log("");
-      break;
     }
+
+    switch (format) {
+      case "json": {
+        const output =
+          reports.length === 1 ? reports[0]?.report : reports;
+        console.log(JSON.stringify(output, null, 2));
+        break;
+      }
+      case "sarif": {
+        const sarifLog = toSarif(reports, "0.1.0");
+        console.log(JSON.stringify(sarifLog, null, 2));
+        break;
+      }
+      case "html": {
+        const html = toHtml(reports, {
+          model: modelLabel,
+          date: new Date().toISOString().slice(0, 10),
+        });
+        console.log(html);
+        break;
+      }
+      case "text": {
+        for (const { file, report } of reports) {
+          console.log(
+            formatReport(
+              report,
+              reports.length > 1 ? file : undefined,
+            ),
+          );
+        }
+        console.log("");
+        break;
+      }
+    }
+
+    return exceedsThreshold(reports, failOn) ? 2 : 0;
   }
 
+  if (cliArgs.watch) {
+    await runAnalysis(paths);
+
+    startWatcher({
+      paths: cliArgs.paths,
+      onChanged: async (changed) => {
+        const valid = changed.filter((p) => {
+          if (shouldExcludeFile(p, config.exclude)) return false;
+          const source = readContract(p);
+          return validateContractFile(p, source).valid;
+        });
+        if (valid.length > 0) {
+          await runAnalysis(valid);
+        }
+      },
+    });
+    return;
+  }
+
+  const exitCode = await runAnalysis(paths);
   process.exit(exitCode);
 }
 

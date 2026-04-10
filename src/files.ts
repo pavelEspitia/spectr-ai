@@ -1,7 +1,9 @@
 import { readdirSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 
-export function findSolidityFiles(dirPath: string): string[] {
+const CONTRACT_EXTENSIONS = new Set([".sol", ".vy"]);
+
+export function findContractFiles(dirPath: string): string[] {
   const results: string[] = [];
   const entries = readdirSync(dirPath);
 
@@ -10,14 +12,19 @@ export function findSolidityFiles(dirPath: string): string[] {
     const stat = statSync(fullPath);
 
     if (stat.isDirectory() && entry !== "node_modules") {
-      const nested = findSolidityFiles(fullPath);
+      const nested = findContractFiles(fullPath);
       for (const file of nested) {
         results.push(file);
       }
-    } else if (stat.isFile() && extname(entry) === ".sol") {
+    } else if (stat.isFile() && CONTRACT_EXTENSIONS.has(extname(entry))) {
       results.push(fullPath);
     }
   }
 
   return results.sort();
+}
+
+// Backward-compatible alias
+export function findSolidityFiles(dirPath: string): string[] {
+  return findContractFiles(dirPath);
 }

@@ -48,7 +48,17 @@ describe("findSolidityFiles", () => {
     expect(files[0]).toContain("Real.sol");
   });
 
-  it("returns empty array for directory with no .sol files", () => {
+  it("finds .vy files alongside .sol", () => {
+    writeFileSync(join(tempDir, "Token.sol"), "contract Token {}");
+    writeFileSync(join(tempDir, "Vault.vy"), "@external\ndef foo():\n    pass");
+
+    const files = findSolidityFiles(tempDir);
+    expect(files).toHaveLength(2);
+    expect(files.some((f) => f.endsWith(".sol"))).toBe(true);
+    expect(files.some((f) => f.endsWith(".vy"))).toBe(true);
+  });
+
+  it("returns empty array for directory with no contract files", () => {
     writeFileSync(join(tempDir, "readme.md"), "hello");
     expect(findSolidityFiles(tempDir)).toEqual([]);
   });

@@ -1,4 +1,6 @@
-export const SYSTEM_PROMPT = `You are an expert smart contract security auditor. Analyze Solidity contracts for vulnerabilities, gas optimizations, and best practice violations.
+import type { ContractLanguage } from "./validator.js";
+
+export const SYSTEM_PROMPT = `You are an expert smart contract security auditor. Analyze smart contracts for vulnerabilities, gas optimizations, and best practice violations.
 
 For each issue found, report:
 - **Severity**: Critical / High / Medium / Low / Info
@@ -19,7 +21,7 @@ End with a **Summary** section containing:
 
 Be precise and actionable. Reference specific function names and patterns.`;
 
-export const JSON_SYSTEM_PROMPT = `You are an expert smart contract security auditor. Analyze Solidity contracts for vulnerabilities, gas optimizations, and best practice violations.
+const JSON_BASE = `You are an expert smart contract security auditor.
 
 Respond with ONLY valid JSON matching this schema — no markdown, no explanation outside the JSON:
 
@@ -31,7 +33,7 @@ Respond with ONLY valid JSON matching this schema — no markdown, no explanatio
       "location": "function name or line reference",
       "description": "What the issue is and why it matters",
       "recommendation": "How to fix it",
-      "codefix": "// corrected Solidity code snippet (only the relevant lines)"
+      "codefix": "// corrected code snippet (only the relevant lines)"
     }
   ],
   "summary": {
@@ -42,6 +44,26 @@ Respond with ONLY valid JSON matching this schema — no markdown, no explanatio
 }
 
 Rules:
-- Include vulnerabilities (reentrancy, overflow, access control), gas optimizations, and best practice violations
+- Include vulnerabilities, gas optimizations, and best practice violations
 - Be precise — reference specific function names
-- The "codefix" field must contain the corrected Solidity code for the affected function or lines. Show only the fixed code, not the original. For info-level issues where no code change is needed, omit the codefix field.`;
+- The "codefix" field must contain the corrected code for the affected function or lines. Show only the fixed code, not the original. For info-level issues where no code change is needed, omit the codefix field.`;
+
+const SOLIDITY_CONTEXT = `
+- Analyze Solidity smart contracts
+- Check for: reentrancy, integer overflow, access control, tx.origin, delegatecall, selfdestruct, unchecked return values
+- Codefix must be valid Solidity`;
+
+const VYPER_CONTEXT = `
+- Analyze Vyper smart contracts
+- Check for: reentrancy (even with @nonreentrant), access control, integer overflow in older versions, raw_call misuse, storage collisions, default visibility issues
+- Codefix must be valid Vyper`;
+
+export function getJsonSystemPrompt(
+  language: ContractLanguage,
+): string {
+  const context = language === "vyper" ? VYPER_CONTEXT : SOLIDITY_CONTEXT;
+  return `${JSON_BASE}\n${context}`;
+}
+
+// Default for backward compatibility
+export const JSON_SYSTEM_PROMPT = getJsonSystemPrompt("solidity");

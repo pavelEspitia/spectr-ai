@@ -7,7 +7,7 @@ export function getChangedSolFiles(
 ): string[] {
   try {
     const output = execSync(
-      `git diff --name-only --diff-filter=ACMR ${gitRef} -- "*.sol"`,
+      `git diff --name-only --diff-filter=ACMR ${gitRef} -- "*.sol" "*.vy"`,
       { cwd, encoding: "utf-8" },
     );
 
