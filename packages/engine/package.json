@@ -1,0 +1,41 @@
+{
+  "name": "@spectr-ai/engine",
+  "version": "0.1.0",
+  "description": "AI-powered smart contract security analyzer — core engine",
+  "type": "module",
+  "main": "./dist/analyzer.js",
+  "types": "./dist/analyzer.d.ts",
+  "exports": {
+    ".": "./dist/analyzer.js",
+    "./provider": "./dist/provider.js",
+    "./schema": "./dist/schema.js",
+    "./validator": "./dist/validator.js",
+    "./prompts": "./dist/prompts.js"
+  },
+  "bin": {
+    "spectr-ai": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "lint": "oxlint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.82.0",
+    "picocolors": "1.1.1",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.2",
+    "oxlint": "1.59.0",
+    "tsx": "4.21.0",
+    "typescript": "5.8.3",
+    "vitest": "4.1.3"
+  }
+}

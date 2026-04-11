@@ -1,0 +1,31 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.2",
+    "@spectr-ai/engine": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "nanoid": "5.1.5",
+    "next": "16.2.3",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.2.2",
+    "@types/node": "25.5.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "drizzle-kit": "^0.31.10",
+    "tailwindcss": "4.2.2",
+    "typescript": "5.8.3"
+  }
+}
