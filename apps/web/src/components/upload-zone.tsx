@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { analyzeAction } from "@/lib/actions";
 
 export function UploadZone() {
   const router = useRouter();
@@ -27,10 +26,16 @@ export function UploadZone() {
       setLoading(true);
       try {
         const source = await file.text();
-        const result = await analyzeAction(file.name, source);
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: file.name, source }),
+        });
 
-        if (result.error) {
-          setError(result.error);
+        const result = await response.json();
+
+        if (!response.ok || result.error) {
+          setError(result.error ?? "Analysis failed");
           return;
         }
 
