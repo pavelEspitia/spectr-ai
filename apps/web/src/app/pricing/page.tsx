@@ -65,12 +65,12 @@ export default function PricingPage() {
             </li>
           </ul>
           <a
-            href="https://noctis.lemonsqueezy.com"
+            href="https://noctis.lemonsqueezy.com/checkout/buy/154652af-8898-4255-85ca-6e2f018f8d49"
             target="_blank"
             rel="noopener noreferrer"
             className="block text-center bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            Subscribe
+            Subscribe — $29/mo
           </a>
         </div>
 
@@ -95,12 +95,55 @@ export default function PricingPage() {
             </li>
           </ul>
           <a
-            href="https://noctis.lemonsqueezy.com"
+            href="https://noctis.lemonsqueezy.com/checkout/buy/f433a87f-5b81-4d25-ad34-de30add50a7f"
             target="_blank"
             rel="noopener noreferrer"
             className="block text-center bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            Subscribe
+            Subscribe — $99/mo
+          </a>
+        </div>
+      </section>
+
+      {/* Digital Products */}
+      <section className="max-w-4xl mx-auto space-y-4">
+        <h2 className="text-xl font-bold text-center">Developer Templates</h2>
+        <div className="grid md:grid-cols-3 gap-6">
+          <a
+            href="https://noctis.lemonsqueezy.com/checkout/buy/81398f6d-d9e8-4721-aabe-bd41fbfd47ea"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border border-zinc-800 rounded-xl p-5 space-y-2 hover:border-emerald-600 transition-colors block"
+          >
+            <h3 className="font-bold">Next.js + Web3 Starter Kit</h3>
+            <p className="text-sm text-zinc-400">
+              Next.js 15 + viem + Tailwind. 6 chains, typed contract calls, dark mode.
+            </p>
+            <p className="text-emerald-400 font-bold">$49</p>
+          </a>
+          <a
+            href="https://noctis.lemonsqueezy.com/checkout/buy/320e3677-0551-4f5e-a699-8f979ae69188"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border border-zinc-800 rounded-xl p-5 space-y-2 hover:border-emerald-600 transition-colors block"
+          >
+            <h3 className="font-bold">AI App Template</h3>
+            <p className="text-sm text-zinc-400">
+              Next.js 15 + Claude/Ollama. Provider abstraction, Zod validation, SSE streaming.
+            </p>
+            <p className="text-emerald-400 font-bold">$39</p>
+          </a>
+          <a
+            href="https://noctis.lemonsqueezy.com/checkout/buy/30a45000-e7d4-4dae-be1a-3de61a0943ed"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border border-zinc-800 rounded-xl p-5 space-y-2 hover:border-emerald-600 transition-colors block"
+          >
+            <h3 className="font-bold">Security Checklist</h3>
+            <p className="text-sm text-zinc-400">
+              35 interactive checks for Solidity + Vyper. Severity tags, progress tracking.
+            </p>
+            <p className="text-emerald-400 font-bold">$19</p>
           </a>
         </div>
       </section>
