@@ -21,6 +21,9 @@ export default function RootLayout({
               spectr-ai
             </a>
             <div className="flex items-center gap-4 text-sm text-zinc-400">
+              <a href="/pricing" className="hover:text-zinc-100">
+                API
+              </a>
               <a href="/history" className="hover:text-zinc-100">
                 History
               </a>
