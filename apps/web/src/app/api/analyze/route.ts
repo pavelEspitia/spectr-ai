@@ -127,9 +127,8 @@ export async function POST(request: Request) {
         // Done
         send("Complete", 100, "done", { id });
       } catch (error) {
-        const msg =
-          error instanceof Error ? error.message : "Analysis failed";
-        send(msg, 0, "error");
+        console.error("[analyze] stream failure:", error);
+        send("Analysis failed. Please try again in a moment.", 0, "error");
       } finally {
         controller.close();
       }

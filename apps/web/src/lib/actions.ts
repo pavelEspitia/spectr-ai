@@ -53,9 +53,8 @@ export async function analyzeAction(
 
     return { id };
   } catch (error) {
-    const msg =
-      error instanceof Error ? error.message : "Analysis failed";
-    return { error: msg };
+    console.error("[analyzeAction] failure:", error);
+    return { error: "Analysis failed. Please try again in a moment." };
   }
 }
 
