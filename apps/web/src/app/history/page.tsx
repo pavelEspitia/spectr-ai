@@ -1,6 +1,8 @@
 import { getAuditHistory } from "@/lib/actions";
 import { SeverityBadge } from "@/components/severity-badge";
 
+export const dynamic = "force-dynamic";
+
 export default async function HistoryPage() {
   const history = await getAuditHistory();
 
