@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "spectr-ai — Smart Contract Security Analyzer",
+  title: "spectr-ai — AI Smart Contract Auditor (Local or Cloud)",
   description:
-    "AI-powered security analysis for Solidity and Vyper smart contracts",
+    "Audit Solidity and Vyper smart contracts with AI. Run with Claude or fully local via Ollama — your code never leaves your machine.",
 };
 
 export default function RootLayout({

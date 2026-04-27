@@ -7,3 +7,4 @@ dist/
 local.db
 local.db-*
 .orchestrator/
+.vercel
