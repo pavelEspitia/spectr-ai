@@ -96,7 +96,7 @@ export default function ApiKeyPage() {
           <div className="bg-zinc-900 rounded-xl p-4 text-sm font-mono">
             <p className="text-zinc-500 mb-2"># Try it:</p>
             <pre className="text-emerald-400 overflow-x-auto whitespace-pre-wrap">
-{`curl -X POST https://spectr-ai.vercel.app/api/v1/audit \\
+{`curl -X POST https://spectr.noctis.biz/api/v1/audit \\
   -H "x-api-key: ${apiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"fileName":"Test.sol","source":"pragma solidity ^0.8.0; contract Test { function foo() public {} }"}'`}

@@ -154,13 +154,13 @@ export default function PricingPage() {
         <div className="bg-zinc-900 rounded-xl p-6 space-y-4 text-sm font-mono">
           <p className="text-zinc-500"># 1. Get your API key</p>
           <pre className="text-emerald-400 overflow-x-auto">
-{`curl -X POST https://spectr-ai.vercel.app/api/v1/keys \\
+{`curl -X POST https://spectr.noctis.biz/api/v1/keys \\
   -H "Content-Type: application/json" \\
   -d '{"email": "you@example.com"}'`}
           </pre>
           <p className="text-zinc-500"># 2. Audit a contract</p>
           <pre className="text-emerald-400 overflow-x-auto">
-{`curl -X POST https://spectr-ai.vercel.app/api/v1/audit \\
+{`curl -X POST https://spectr.noctis.biz/api/v1/audit \\
   -H "x-api-key: sk_spectr_..." \\
   -H "Content-Type: application/json" \\
   -d '{"fileName": "Token.sol", "source": "pragma solidity ^0.8.0; ..."}'`}
