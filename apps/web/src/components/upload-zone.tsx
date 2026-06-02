@@ -120,7 +120,7 @@ export function UploadZone() {
           flex flex-col items-center justify-center
           border-2 border-dashed rounded-xl p-12 cursor-pointer
           transition-colors duration-200
-          ${dragging ? "border-emerald-500 bg-emerald-500/5" : "border-zinc-700 hover:border-zinc-500"}
+          ${dragging ? "border-amber-500 bg-amber-500/5" : "border-zinc-700 hover:border-zinc-500"}
           ${loading ? "pointer-events-none" : ""}
         `}
       >
@@ -137,13 +137,13 @@ export function UploadZone() {
         {loading && progress ? (
           <div className="w-full max-w-sm space-y-4">
             <div className="text-center space-y-1">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-zinc-600 border-t-emerald-500" />
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-zinc-600 border-t-amber-500" />
               <p className="text-zinc-300 font-medium">{progress.step}</p>
               <p className="text-zinc-500 text-sm">{progress.percent}%</p>
             </div>
             <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
               <div
-                className="bg-emerald-500 h-full rounded-full transition-all duration-500 ease-out"
+                className="bg-amber-500 h-full rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progress.percent}%` }}
               />
             </div>

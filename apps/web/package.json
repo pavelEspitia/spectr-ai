@@ -15,6 +15,7 @@
     "@libsql/client": "^0.17.2",
     "@spectr-ai/engine": "workspace:*",
     "drizzle-orm": "^0.45.2",
+    "motion": "12.40.0",
     "nanoid": "5.1.5",
     "next": "16.2.3",
     "react": "19.1.0",
