@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { UploadZone } from "@/components/upload-zone";
+import { AddressAudit } from "@/components/address-audit";
 
 export function HomeHero() {
   const reduce = useReducedMotion();
@@ -41,8 +42,9 @@ export function HomeHero() {
           <span className="text-amber">locally or in the cloud</span>
         </h1>
         <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-          Drop a Solidity or Vyper file here for an instant report powered by
-          Claude. Or install the open-source CLI and run fully local with
+          Paste a deployed contract address to audit it straight from the chain,
+          or drop a Solidity / Vyper file for an instant report powered by
+          Claude. Prefer local? The open-source CLI runs fully offline with
           Ollama: your code never leaves your machine.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-500 pt-1">
@@ -60,7 +62,13 @@ export function HomeHero() {
           </span>
         </div>
       </motion.section>
-      <motion.div variants={item}>
+      <motion.div variants={item} className="space-y-5">
+        <AddressAudit />
+        <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-zinc-600">
+          <span className="h-px flex-1 bg-zinc-800" />
+          or upload a file
+          <span className="h-px flex-1 bg-zinc-800" />
+        </div>
         <UploadZone />
       </motion.div>
     </motion.div>

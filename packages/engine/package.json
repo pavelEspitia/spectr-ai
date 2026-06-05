@@ -10,7 +10,8 @@
     "./provider": "./dist/provider.js",
     "./schema": "./dist/schema.js",
     "./validator": "./dist/validator.js",
-    "./prompts": "./dist/prompts.js"
+    "./prompts": "./dist/prompts.js",
+    "./chain": "./dist/chain.js"
   },
   "bin": {
     "spectr-ai": "./dist/cli.js"

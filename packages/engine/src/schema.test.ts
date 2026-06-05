@@ -53,6 +53,23 @@ describe("parseReport", () => {
     expect(report.issues[0]?.codefix).toBeUndefined();
   });
 
+  it("defaults omitted prose fields to empty strings", () => {
+    const json = JSON.stringify({
+      issues: [
+        { severity: "high", title: "tx.origin auth" },
+      ],
+      summary: {
+        riskRating: "high",
+        counts: { critical: 0, high: 1, medium: 0, low: 0, info: 0 },
+        topFixes: [],
+      },
+    });
+    const report = parseReport(json);
+    expect(report.issues[0]?.recommendation).toBe("");
+    expect(report.issues[0]?.description).toBe("");
+    expect(report.issues[0]?.location).toBe("");
+  });
+
   it("throws ReportParseError on invalid JSON", () => {
     expect(() => parseReport("not json")).toThrow(ReportParseError);
     expect(() => parseReport("not json")).toThrow("Invalid JSON");
