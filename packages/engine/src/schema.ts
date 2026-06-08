@@ -8,12 +8,14 @@ const severitySchema = z.enum([
   "info",
 ]);
 
+// Prose fields default to "" so a single omitted field from the model doesn't
+// discard an otherwise complete report. Structural fields stay required.
 const issueSchema = z.object({
   severity: severitySchema,
   title: z.string(),
-  location: z.string(),
-  description: z.string(),
-  recommendation: z.string(),
+  location: z.string().default(""),
+  description: z.string().default(""),
+  recommendation: z.string().default(""),
   codefix: z.string().optional(),
 });
 

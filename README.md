@@ -1,6 +1,6 @@
 # spectr-ai
 
-AI-powered smart contract security analyzer. Uses Claude or local models (Ollama) to audit Solidity contracts for vulnerabilities, gas optimizations, and best practice violations.
+AI-powered smart contract security analyzer. Audits a Solidity/Vyper file — or a contract deployed on any supported EVM chain, fetched by address — for vulnerabilities, gas optimizations, and best practice violations. Runs on Claude or local models (Ollama).
 
 [![CI](https://github.com/pavelEspitia/spectr-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/pavelEspitia/spectr-ai/actions/workflows/ci.yml)
 
@@ -91,6 +91,7 @@ spectr-ai [options] <contract.sol|directory>
 | `--sarif` | SARIF v2.1.0 for GitHub Code Scanning |
 | `--html` | Self-contained HTML audit report |
 | `--diff <ref>` | Only analyze .sol files changed since git ref |
+| `--chain <id>` | Chain for on-chain audits: `ethereum`, `base`, `arbitrum`, `polygon`, `optimism`, `sepolia` (default: `ethereum`) |
 | `--fail-on <severity>` | Exit code 2 threshold (default: `high`) |
 | `--model <model>` | Model to use (default: `claude-sonnet-4-6`) |
 
@@ -114,6 +115,26 @@ spectr-ai --sarif contracts/ > results.sarif
 
 # Local model
 spectr-ai --model ollama:qwen2.5-coder:7b contracts/
+```
+
+### Audit a deployed contract (read from chain)
+
+Pass a contract address instead of a file to fetch its verified source straight
+from the chain and audit it. Requires a free [Etherscan V2 API key](https://etherscan.io/apis)
+(one key covers every supported chain); proxy contracts resolve to their
+implementation automatically.
+
+```bash
+export ETHERSCAN_API_KEY=...
+
+# Audit WETH on Ethereum mainnet
+spectr-ai 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+
+# Audit a contract on Base
+spectr-ai 0xABC...123 --chain base
+
+# Audit a testnet deployment
+spectr-ai 0xABC...123 --chain sepolia --json
 ```
 
 ### Exit codes
@@ -178,7 +199,7 @@ pnpm run dev examples/vulnerable.sol
 |---------|-------------|
 | `pnpm run dev` | Run CLI in development mode |
 | `pnpm run build` | Compile TypeScript to `dist/` |
-| `pnpm run test` | Run tests (69 tests) |
+| `pnpm run test` | Run tests (88 tests) |
 | `pnpm run lint` | Lint with oxlint |
 | `pnpm run typecheck` | Type-check with tsc |
 
