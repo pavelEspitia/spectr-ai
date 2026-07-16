@@ -8,6 +8,7 @@ import {
   createProvider,
   OllamaConnectionError,
   OllamaModelNotFoundError,
+  OllamaTimeoutError,
 } from "./provider.js";
 import type { Provider, ModelConfig } from "./provider.js";
 import { validateContractFile } from "./validator.js";
@@ -20,8 +21,16 @@ import { loadConfig, shouldExcludeFile } from "./config.js";
 import { toHtml } from "./html.js";
 import { getChangedSolFiles, DiffError } from "./diff.js";
 import { startWatcher } from "./watcher.js";
+import {
+  ChainFetchError,
+  fetchContractSource,
+  isContractAddress,
+  SUPPORTED_CHAINS,
+} from "./chain.js";
 
 type OutputFormat = "text" | "json" | "sarif" | "html";
+
+const DEFAULT_CHAIN = "ethereum";
 
 const SEVERITY_RANK: Record<Severity, number> = {
   critical: 0,
@@ -37,6 +46,8 @@ const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 interface CliArgs {
   paths: string[];
+  addresses: string[];
+  chain: string;
   format: OutputFormat;
   failOn: Severity;
   modelConfig: ModelConfig;
@@ -109,14 +120,30 @@ function parseArgs(argv: string[]): CliArgs {
     diffRef = diffArg.value;
   }
 
+  let chain = DEFAULT_CHAIN;
+  const chainArg = getValueArg(args, "--chain");
+  if (chainArg.index !== -1) {
+    if (!chainArg.value || !(chainArg.value in SUPPORTED_CHAINS)) {
+      console.error(
+        `Error: --chain requires one of: ${Object.keys(SUPPORTED_CHAINS).join(", ")}`,
+      );
+      process.exit(1);
+    }
+    chain = chainArg.value;
+  }
+
   const valueArgIndices = new Set<number>();
   if (failOnArg.index !== -1) valueArgIndices.add(failOnArg.index + 1);
   if (modelArg.index !== -1) valueArgIndices.add(modelArg.index + 1);
   if (diffArg.index !== -1) valueArgIndices.add(diffArg.index + 1);
+  if (chainArg.index !== -1) valueArgIndices.add(chainArg.index + 1);
 
   const positional = args.filter(
     (a, i) => !a.startsWith("--") && !valueArgIndices.has(i),
   );
+
+  const addresses = positional.filter(isContractAddress);
+  const fileTokens = positional.filter((p) => !isContractAddress(p));
 
   if (diffRef && positional.length === 0) {
     // --diff mode doesn't require positional args
@@ -133,6 +160,9 @@ function parseArgs(argv: string[]): CliArgs {
     );
     console.error(
       "  --diff <ref>              Only analyze .sol files changed vs ref",
+    );
+    console.error(
+      `  --chain <id>              Chain for on-chain audits (default: ${DEFAULT_CHAIN})`,
     );
     console.error(
       "  --watch                   Re-analyze on file changes",
@@ -153,13 +183,14 @@ function parseArgs(argv: string[]): CliArgs {
     console.error("");
     console.error("Examples:");
     console.error("  spectr-ai contracts/Token.sol");
+    console.error("  spectr-ai 0xABC...123 --chain base   (audit a deployed contract)");
     console.error("  spectr-ai --model ollama:deepseek-coder-v2 contracts/");
     console.error("  spectr-ai --json --fail-on medium contracts/");
     process.exit(1);
   }
 
   const paths: string[] = [];
-  for (const p of positional) {
+  for (const p of fileTokens) {
     const resolved = resolve(p);
     try {
       const stat = statSync(resolved);
@@ -183,7 +214,16 @@ function parseArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { paths, format, failOn, modelConfig, diffRef, watch: watchMode };
+  return {
+    paths,
+    addresses,
+    chain,
+    format,
+    failOn,
+    modelConfig,
+    diffRef,
+    watch: watchMode,
+  };
 }
 
 function handleError(error: unknown): never {
@@ -197,6 +237,8 @@ function handleError(error: unknown): never {
     );
   } else if (error instanceof Anthropic.RateLimitError) {
     console.error("Error: rate limited. Wait a moment and try again.");
+  } else if (error instanceof OllamaTimeoutError) {
+    console.error(`Error: ${error.message}`);
   } else if (error instanceof OllamaConnectionError) {
     console.error(`Error: ${error.message}`);
     console.error(
@@ -254,6 +296,96 @@ function exceedsThreshold(
   );
 }
 
+async function analyzeAddresses(
+  addresses: string[],
+  chain: string,
+  provider: Provider,
+): Promise<Array<{ file: string; report: JsonReport }>> {
+  const reports: Array<{ file: string; report: JsonReport }> = [];
+
+  for (const address of addresses) {
+    try {
+      const contract = await fetchContractSource(address, chain);
+      console.error(
+        `  spectr-ai — fetched ${contract.name} from ${contract.chain} (${address})`,
+      );
+      const result = await analyzeContractJson(
+        contract.source,
+        provider,
+        contract.language,
+      );
+      reports.push({
+        file: `${contract.name} @ ${contract.chain}:${address}`,
+        report: result.report,
+      });
+      console.error(
+        `  Tokens: ${result.inputTokens} in / ${result.outputTokens} out`,
+      );
+    } catch (error) {
+      if (error instanceof ChainFetchError) {
+        console.error(`Error: ${error.message}`);
+        process.exit(1);
+      }
+      handleError(error);
+    }
+  }
+
+  return reports;
+}
+
+function emitReports(
+  reports: Array<{ file: string; report: JsonReport }>,
+  opts: {
+    format: OutputFormat;
+    failOn: Severity;
+    modelLabel: string;
+    ignore: string[];
+  },
+): number {
+  if (opts.ignore.length > 0) {
+    for (const entry of reports) {
+      entry.report.issues = entry.report.issues.filter((issue) => {
+        const text = `${issue.title} ${issue.description}`.toLowerCase();
+        return !opts.ignore.some((pattern) =>
+          text.includes(pattern.toLowerCase()),
+        );
+      });
+    }
+  }
+
+  switch (opts.format) {
+    case "json": {
+      const output = reports.length === 1 ? reports[0]?.report : reports;
+      console.log(JSON.stringify(output, null, 2));
+      break;
+    }
+    case "sarif": {
+      const sarifLog = toSarif(reports, "0.1.0");
+      console.log(JSON.stringify(sarifLog, null, 2));
+      break;
+    }
+    case "html": {
+      const html = toHtml(reports, {
+        model: opts.modelLabel,
+        date: new Date().toISOString().slice(0, 10),
+      });
+      console.log(html);
+      break;
+    }
+    case "text": {
+      for (const { file, report } of reports) {
+        console.log(
+          formatReport(report, reports.length > 1 ? file : undefined),
+        );
+      }
+      console.log("");
+      break;
+    }
+  }
+
+  return exceedsThreshold(reports, opts.failOn) ? 2 : 0;
+}
+
 async function main(): Promise<void> {
   const config = loadConfig(process.cwd());
   const cliArgs = parseArgs(process.argv);
@@ -309,8 +441,15 @@ async function main(): Promise<void> {
     return true;
   });
 
-  if (paths.length === 0) {
-    console.error("Error: no files to analyze after applying excludes");
+  const { addresses } = cliArgs;
+
+  if (paths.length === 0 && addresses.length === 0) {
+    console.error("Error: nothing to analyze after applying excludes");
+    process.exit(1);
+  }
+
+  if (cliArgs.watch && addresses.length > 0) {
+    console.error("Error: --watch is not supported with on-chain addresses");
     process.exit(1);
   }
 
@@ -342,59 +481,17 @@ async function main(): Promise<void> {
     }
   }
 
-  async function runAnalysis(
-    filePaths: string[],
-  ): Promise<number> {
+  const emitOpts = {
+    format,
+    failOn,
+    modelLabel,
+    ignore: config.ignore,
+  };
+
+  async function runAnalysis(filePaths: string[]): Promise<number> {
     console.error("");
     const reports = await analyzeAll(filePaths, provider);
-
-    if (config.ignore.length > 0) {
-      for (const entry of reports) {
-        entry.report.issues = entry.report.issues.filter((issue) => {
-          const text =
-            `${issue.title} ${issue.description}`.toLowerCase();
-          return !config.ignore.some((pattern) =>
-            text.includes(pattern.toLowerCase()),
-          );
-        });
-      }
-    }
-
-    switch (format) {
-      case "json": {
-        const output =
-          reports.length === 1 ? reports[0]?.report : reports;
-        console.log(JSON.stringify(output, null, 2));
-        break;
-      }
-      case "sarif": {
-        const sarifLog = toSarif(reports, "0.1.0");
-        console.log(JSON.stringify(sarifLog, null, 2));
-        break;
-      }
-      case "html": {
-        const html = toHtml(reports, {
-          model: modelLabel,
-          date: new Date().toISOString().slice(0, 10),
-        });
-        console.log(html);
-        break;
-      }
-      case "text": {
-        for (const { file, report } of reports) {
-          console.log(
-            formatReport(
-              report,
-              reports.length > 1 ? file : undefined,
-            ),
-          );
-        }
-        console.log("");
-        break;
-      }
-    }
-
-    return exceedsThreshold(reports, failOn) ? 2 : 0;
+    return emitReports(reports, emitOpts);
   }
 
   if (cliArgs.watch) {
@@ -416,7 +513,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  const exitCode = await runAnalysis(paths);
+  console.error("");
+  const reports = [
+    ...(paths.length > 0 ? await analyzeAll(paths, provider) : []),
+    ...(addresses.length > 0
+      ? await analyzeAddresses(addresses, cliArgs.chain, provider)
+      : []),
+  ];
+  const exitCode = emitReports(reports, emitOpts);
   process.exit(exitCode);
 }
 
