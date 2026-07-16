@@ -8,6 +8,7 @@ import {
   createProvider,
   OllamaConnectionError,
   OllamaModelNotFoundError,
+  OllamaTimeoutError,
 } from "./provider.js";
 import type { Provider, ModelConfig } from "./provider.js";
 import { validateContractFile } from "./validator.js";
@@ -236,6 +237,8 @@ function handleError(error: unknown): never {
     );
   } else if (error instanceof Anthropic.RateLimitError) {
     console.error("Error: rate limited. Wait a moment and try again.");
+  } else if (error instanceof OllamaTimeoutError) {
+    console.error(`Error: ${error.message}`);
   } else if (error instanceof OllamaConnectionError) {
     console.error(`Error: ${error.message}`);
     console.error(
