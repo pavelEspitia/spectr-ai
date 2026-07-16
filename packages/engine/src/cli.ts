@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";

@@ -1,7 +1,7 @@
 {
   "name": "@spectr-ai/engine",
   "version": "0.1.0",
-  "description": "AI-powered smart contract security analyzer — core engine",
+  "description": "AI-powered smart contract security analyzer \u2014 core engine",
   "type": "module",
   "main": "./dist/analyzer.js",
   "types": "./dist/analyzer.d.ts",
@@ -38,5 +38,8 @@
     "tsx": "4.21.0",
     "typescript": "5.8.3",
     "vitest": "4.1.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
