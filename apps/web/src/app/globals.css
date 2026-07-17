@@ -1,43 +1,173 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Noctis luxury system · spectr-ai (molten gold accent)
+   Shared: near-black base, glass surfaces, living ember sky,
+   Bodoni Moda display + Archivo body + JetBrains Mono data.
+   ============================================================ */
+
 @theme {
-  --color-charcoal: #050505;
-  --color-amber: #f59e0b;
-  --font-serif: var(--font-playfair), Georgia, serif;
+  --color-charcoal: #0c0a06;
+  --color-panel: #161209;
+  --color-amber: #e9b949;
+
+  /* Repoint the Tailwind palette steps the UI already uses to molten gold. */
+  --color-amber-300: #ffe08a;
+  --color-amber-400: #f5cf6a;
+  --color-amber-500: #e9b949;
+  --color-amber-600: #9c7420;
+
+  --font-serif: var(--font-bodoni), Georgia, serif;
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+:root {
+  --accent: #e9b949;
+  --accent-hi: #ffe08a;
+  --accent-deep: #9c7420;
+  --glow: rgba(233, 185, 73, 0.32);
+  --glass: rgba(22, 18, 9, 0.55);
+  --glass-edge: rgba(255, 224, 138, 0.14);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 body {
   background-color: var(--color-charcoal);
+  font-family: var(--font-sans);
+  font-weight: 300;
+}
+
+/* ---------- Living ember sky ---------- */
+
+.sky {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ember {
+  position: absolute;
+  inset: -35% -25%;
+  filter: blur(48px);
+  will-change: transform, opacity;
+}
+
+.ember-a {
+  background: radial-gradient(ellipse 50% 38% at 22% 14%, rgba(233, 185, 73, 0.32) 0%, transparent 62%);
+  animation: ember-a 44s ease-in-out infinite alternate;
+}
+.ember-b {
+  background: radial-gradient(ellipse 54% 34% at 78% 12%, rgba(255, 224, 138, 0.18) 0%, transparent 64%);
+  animation: ember-b 58s ease-in-out infinite alternate;
+}
+.ember-c {
+  background: radial-gradient(ellipse 52% 34% at 50% 46%, rgba(200, 141, 40, 0.18) 0%, transparent 62%);
+  animation: ember-c 72s ease-in-out infinite alternate;
+}
+
+@keyframes ember-a {
+  from { transform: translate3d(-11%, -5%, 0) rotate(-4deg) scale(1); opacity: 0.75; }
+  to   { transform: translate3d(13%, 7%, 0) rotate(6deg) scale(1.24); opacity: 1; }
+}
+@keyframes ember-b {
+  from { transform: translate3d(9%, 3%, 0) rotate(4deg) scale(1.16); opacity: 1; }
+  to   { transform: translate3d(-13%, -6%, 0) rotate(-6deg) scale(1); opacity: 0.7; }
+}
+@keyframes ember-c {
+  from { transform: translate3d(-7%, 6%, 0) rotate(2deg) scale(1.06); opacity: 0.75; }
+  to   { transform: translate3d(11%, -5%, 0) rotate(-5deg) scale(1.28); opacity: 1; }
+}
+
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+}
+
+/* ---------- Glass header ---------- */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  border-bottom: 1px solid var(--glass-edge) !important;
+  animation: spectr-fade-in 0.9s var(--ease-out) both;
 }
 
 @keyframes spectr-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes spectr-glow {
-  0%,
-  100% {
-    text-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
-  }
-  50% {
-    text-shadow: 0 0 26px rgba(245, 158, 11, 0.5);
-  }
-}
-
-.site-header {
-  animation: spectr-fade-in 0.9s ease-out both;
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .monogram-glow {
   animation: spectr-glow 4.5s ease-in-out infinite;
+}
+
+@keyframes spectr-glow {
+  0%, 100% { text-shadow: 0 0 12px rgba(233, 185, 73, 0.3); }
+  50% { text-shadow: 0 0 26px rgba(233, 185, 73, 0.6); }
+}
+
+.font-serif {
+  font-optical-sizing: none;
+  font-weight: 600;
+}
+
+main {
+  animation: rise-in 0.8s var(--ease-out) both;
+  animation-delay: 0.1s;
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Glass cards ---------- */
+
+.glass {
+  position: relative;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 235, 170, 0.06), 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    200px circle at var(--mx, 50%) var(--my, -20%),
+    var(--accent-hi), var(--accent) 40%, transparent 70%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .glass:hover::before { opacity: 1; }
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -48,4 +178,9 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+  .ember { animation: none !important; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .site-header, .glass { background: var(--color-panel); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }

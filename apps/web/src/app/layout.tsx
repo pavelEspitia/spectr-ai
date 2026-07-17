@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
-import { Playfair_Display, JetBrains_Mono } from "next/font/google";
+import { Bodoni_Moda, Archivo, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const playfair = Playfair_Display({
+const bodoni = Bodoni_Moda({
   subsets: ["latin"],
   style: ["normal", "italic"],
-  variable: "--font-playfair",
+  weight: ["600", "700"],
+  variable: "--font-bodoni",
+});
+
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  variable: "--font-archivo",
 });
 
 const jetbrains = JetBrains_Mono({
@@ -27,10 +34,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${playfair.variable} ${jetbrains.variable}`}
+      className={`dark ${bodoni.variable} ${archivo.variable} ${jetbrains.variable}`}
     >
       <body className="bg-charcoal text-zinc-100 min-h-screen antialiased">
-        <header className="site-header border-b border-zinc-800 px-6 py-4">
+        <div className="sky" aria-hidden="true">
+          <div className="ember ember-a" />
+          <div className="ember ember-b" />
+          <div className="ember ember-c" />
+        </div>
+        <div className="grain" aria-hidden="true" />
+        <header className="site-header px-6 py-4">
           <nav className="max-w-5xl mx-auto flex items-center justify-between">
             <a href="/" className="flex items-center gap-2">
               <span

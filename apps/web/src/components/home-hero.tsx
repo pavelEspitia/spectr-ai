@@ -62,7 +62,7 @@ export function HomeHero() {
           </span>
         </div>
       </motion.section>
-      <motion.div variants={item} className="space-y-5">
+      <motion.div variants={item} className="glass space-y-5 rounded-2xl p-6 md:p-8">
         <AddressAudit />
         <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-zinc-600">
           <span className="h-px flex-1 bg-zinc-800" />
